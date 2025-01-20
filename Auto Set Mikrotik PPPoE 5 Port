@@ -1,0 +1,72 @@
+# Mengembalikan Nama Interface Mikrotik ke Default
+######################################
+:foreach i in=[/interface ethernet find ] do={ 
+:local y [/interface ethernet get $i name] ;
+:local x [/interface ethernet get $i default-name];
+:log warning "Change interface Name $y => $x"
+/interface set $y name=$x;
+}
+
+#Set Interface-5-port
+/interface 
+set ether1 name=1.ISP comment="***Input-Internet***"
+set ether2 name=2.ether2 comment="***Out-Link***"
+set ether3 name=3.ether3
+set ether4 name=4.ether4
+set ether5 name=5.ether5
+
+#Set Interface
+/interface list
+add name=WAN
+
+/interface list member
+add interface=1.ISP list=WAN
+
+#Detect Internet
+/interface detect-internet
+set detect-interface-list=WAN internet-interface-list=WAN wan-interface-list=WAN
+
+#Add Bridge 2,3,4,5
+/interface bridge
+add name=Koneksi
+/interface bridge port
+add bridge=Koneksi interface=2.ether2
+add bridge=Koneksi interface=3.ether3
+add bridge=Koneksi interface=4.ether4
+add bridge=Koneksi interface=5.ether5
+
+#Set Dns 1.1.1.1
+/ip dns
+set allow-remote-requests=yes servers=1.1.1.1,1.0.0.1
+/ip dns static
+add address=1.1.1.1 name=cloudflare-dns.com
+add address=1.0.0.1 name=cloudflare-dns.com
+
+#Nat masquerade All
+/ip firewall nat add action=masquerade chain=srcnat comment=***Out-All***
+
+#Add IP Lokal Interface Bridge
+/ip address
+add address=10.10.10.1/22 interface=Koneksi network=10.10.10.1
+
+/ip firewall address-list
+add address=10.10.8.0/22 list=LOCAL-IP
+
+#Add SNTP Indonesia
+/system ntp client
+set enabled=yes server-dns-names=id.pool.ntp.org
+
+#Add Ip Pool
+/ip pool
+add name=PPPoE ranges=10.10.8.1-10.10.10.0,10.10.10.2-10.10.11.254
+
+#Add PPPoE Server
+/interface pppoe-server server
+add disabled=no interface=Koneksi keepalive-timeout=2 one-session-per-host=yes \
+    service-name=PPPoE
+
+#Add PPPoE Profile sesuaikan
+/ppp profile
+add local-address=10.10.10.1 name="3 Mbps--" rate-limit=10M/3M remote-address=PPPoE
+add local-address=10.10.10.1 name="7 Mbps--" rate-limit=10M/7M remote-address=PPPoE
+add local-address=10.10.10.1 name="5 Mbps--" rate-limit=10M/5M remote-address=PPPoE
